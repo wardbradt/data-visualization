@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<!--Ward Bradt-->
+<!--Zufelt CSC 630: Data Visualization-->
+<!--September 20, 2017-->
+<!--University Scatter Plot-->
+<!--Learned how to randomize n elements of an array at (copied code)-->
+<!--https://stackoverflow.com/questions/19269545/how-to-get-n-no-elements-randomly-from-an-array-->
+<!--Drop down-->
+<!--http://bl.ocks.org/jfreels/6734823-->
+<!--http://bl.ocks.org/feyderm/e6cab5931755897c2eb377ccbf9fdf18-->
+<!--Transitioning Text-->
+<!--https://stackoverflow.com/questions/21843667/d3-change-text-label-when-data-updates-->
+<!--Entering in new data-->
+<!--https://bl.ocks.org/mbostock/3808234-->
+<!--Moving elements to back (copied code)-->
+<!--http://bl.ocks.org/eesur/4e0a69d57d3bfc8a82c2-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>University Statistics</title>
+    <script src='https://d3js.org/d3.v4.min.js'></script>
+    <link rel="stylesheet" href="stylesheet.css">
+</head>
+<body>
+<!--todo https://cmatskas.com/importing-csv-files-using-jquery-and-html5/-->
+<div id="container">
+    <div class="dropdown" id="yAxisDiv">
+    </div>
+
+    <div id="svgBox">
+    </div>
+
+    <div id="dotInfo">
+        <p>Welcome to Ward's University Statistics Data Visualization!</p>
+        <p>You can:</p>
+        <ul>
+            <li>Mouse over a point to see information about that school</li>
+            <li>Change the x and y axes to a variety of variables.</li>
+            <li>Randomize the data selection (Currently the top 100 universities are on display.)</li>
+        </ul>
+    </div>
+
+    <div class="dropdown" id="xAxisDiv">
+    </div>
+
+    <div class="dropdown" id="radiusDiv">
+        <button onclick="showClassList('radius')" class="dropbtn">Radius</button>
+        <div id="radius" class="dropdown-content">
+        </div>
+    </div>
+
+    <div id="randomizeDiv">
+    </div>
+</div>
+
+<script>
+    /* When the user clicks on the button,
+        toggle between hiding and showing the dropdown content */
+    function showClassList(id) {
+        document.getElementById(id).classList.toggle("show");
+    }
+
+    // Close the dropdown menu if the user clicks outside of it
+    window.onclick = function(event) {
+        if (!event.target.matches(".dropbtn")) {
+
+            var dropdowns = document.getElementsByClassName("dropdown-content");
+            for (var i = 0; i < dropdowns.length; i++) {
+                var openDropdown = dropdowns[i];
+                if (openDropdown.classList.contains("show")) {
+                    openDropdown.classList.remove("show");
+                }
+            }
+        }
+    };
+
+    d3.selection.prototype.moveToBack = function() {
+        return this.each(function() {
+            var firstChild = this.parentNode.firstChild;
+            if (firstChild) {
+                this.parentNode.insertBefore(this, firstChild);
+            }
+        });
+    };
+
+    const width = 800,
+        height = 500,
+        margin = {
+            top: 10,
+            bottom: 10,
+            left: 30,
+            right: 30
+        };
+
+    d3.csv("cwurData.csv",
+        function(error, data) {
+            // todo can we put this after the splice to save runtime by iterating over less elements?
+            data.forEach(function(d) {
+                d.world_rank = +d.world_rank;
+                d.national_rank = +d.national_rank;
+                d.quality_of_education = +d.quality_of_education;
+                d.alumni_employment = + d.alumni_employment;
+                d.quality_of_faculty = +d.quality_of_faculty;
+                d.publications = + d.publications;
+                d.influence = +d.influence;
+                d.citations = +d.citations;
+                d.broad_impact = +d.broad_impact;
+                d.patents = +d.patents;
+                d.score = +d.score;
+            });
+
+            var introduction = "";
+
+            data.splice(0,1200);
+
+            var dataSet = data.slice(0, 100);
+            var topHundred = dataSet;
+
+            var xAxis = "world_rank";
+            var yAxis = "score";
+            var radius = "default";
+
+            var ranges = {
+                "world_rank" : d3.extent(dataSet, function(d) { return d.world_rank}),
+                "alumni_employment" : d3.extent(dataSet, function(d) { return d.alumni_employment}),
+                "quality_of_education" : d3.extent(dataSet, function(d) { return d.quality_of_education}),
+                "quality_of_faculty" : d3.extent(dataSet, function(d) { return d.quality_of_faculty}),
+                "publications" : d3.extent(dataSet, function(d) { return d.publications}),
+                "influence" : d3.extent(dataSet, function(d) { return d.influence}),
+                "citations" : d3.extent(dataSet, function(d) { return d.citations}),
+                "broad_impact" : d3.extent(dataSet, function(d) { return d.broad_impact}),
+                "patents" : d3.extent(dataSet, function(d) { return d.patents}),
+                "score" : d3.extent(dataSet, function(d) { return d.score})
+            };
+
+
+            function updateRanges() {
+                for (var i in ranges) {
+                    ranges[i] = d3.extent(dataSet, function(d) { return d[i]});
+                }
+            }
+
+            function randomize() {
+                dataSet = getRandom(data, 200);
+                updateRanges();
+                update(dataSet);
+            }
+
+            function showTopHundred() {
+                dataSet = topHundred;
+                updateRanges();
+                update(dataSet);
+            }
+
+            var rangesKeys = Object.keys(ranges);
+            rangesKeys.push("default")
+
+            d3.select("#radius")
+                .selectAll("a")
+                .data(rangesKeys)
+                .enter()
+                .append("a")
+                .text(function(d) {return stripUnderScore(d);})
+                .on("click", function(d) {
+                    radius = d;
+                    updateGraph();
+                });
+
+            d3.select("#yAxisSelect")
+                .selectAll("a")
+                .data(Object.keys(ranges))
+                .enter()
+                .append("a")
+                .text(function(d) {return stripUnderScore(d);})
+                .on("click", function(d) {
+                    yAxis = d;
+                    updateGraph();
+                });
+
+            d3.select("#randomizeDiv")
+                .append("button")
+                .attr("id", "randomizeButton")
+                .text("Randomize")
+                .on("click", function() {
+                    if (d3.select(this).text() === "Randomize" ) {
+                        randomize();
+                        d3.select(this).text("Top 100");
+                    }
+                    else if (d3.select(this).text() === "Top 100") {
+                        showTopHundred();
+                        d3.select(this).text("Randomize");
+                    }
+                });
+
+            var x = d3.scaleLinear()
+                .domain(ranges[xAxis])
+                .range([margin.left, width - margin.right]);
+
+            var y = d3.scaleLinear()
+                .domain(ranges[yAxis])
+                .range([height - margin.bottom, margin.top]);
+
+            var radius_range = (radius === "default") ? d3.scaleLinear()
+                .domain([5,5])
+                .range([5,5]) : d3.scaleLinear()
+                .domain(ranges[radius])
+                .range([3,12]);
+
+            var dotInfo = d3.select("#dotInfo");
+
+            var svg = d3.select("#svgBox").append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .style("margin", "0 auto")
+                .style("display", "block")
+                .style("overflow", "visible");
+
+//            Add the circles for the initial data set
+            svg.selectAll("circle")
+                .data(dataSet, function (d) {return d.institution})
+                .enter()
+                .append("circle")
+                .attr("class", "circleX")
+                .attr("cx", function(d) {return x(d[xAxis])})
+                .attr("cy", function(d) {return y(d[yAxis])})
+                .attr("r", function(d) {return radius_range(d[radius])})
+                .on("mouseover", function(d) {
+                    introduction = dotInfo.html();
+                    dotInfo.html("");
+                    d3.select(this)
+                        .transition()
+                        .duration(800)
+                        .attr("r", 30);
+
+                    for (var i in d) {
+                        if (i === "year") break;
+                        d3.select("#dotInfo")
+                            .append("p")
+                            .text(stripUnderScore(i) + ": " + d[i]);
+                    }
+                })
+                .on("mouseout", hideInfo);
+
+            function hideInfo() {
+                d3.select(this)
+                    .moveToBack()
+                    .transition()
+                    .duration(500)
+                    .attr("r", function(d) { return radius_range(d[radius])})
+//                    fill to black to prevent them staying red while changing axes (a bug)
+                    .attr("fill", "black");
+
+                dotInfo.html(introduction);
+            }
+
+//            Add the axis button
+            svg.append("g")
+                .attr("id", "xaxisticks")
+                .attr("transform", `translate(${0}, ${height - margin.bottom})`)
+                .call(d3.axisBottom(x).ticks(5));
+
+            var xAxisButton = d3.select("#xAxisDiv")
+                .append("button")
+                .attr("class", "dropbtn")
+                .attr("transform",
+                    `translate(${width / 2}, ${height - (margin.bottom / 2)})`)
+                .on("click", function() {
+                    showClassList("xAxisSelect")
+                })
+                .text(stripUnderScore(xAxis));
+
+            var xAxisSelect = d3.select("#xAxisDiv").append("div")
+                .attr("id", "xAxisSelect")
+                .attr("class", "dropdown-content");
+
+            xAxisSelect
+                .selectAll("a")
+                .data(Object.keys(ranges))
+                .enter()
+                .append("a")
+                .text(function(d) {return stripUnderScore(d);})
+                .on("click", function(d) {
+                    xAxis = d;
+                    updateGraph();
+                });
+
+            var yAxisButton = d3.select("#yAxisDiv")
+                .append("button")
+                .attr("class", "dropbtn")
+                .attr("transform",
+                    `translate(${margin.left / 2}, ${height / 2}) rotate(-90)`)
+                .on("click", function() {
+                    showClassList("yAxisSelect")
+                })
+                .text(stripUnderScore(yAxis));
+
+            var yAxisSelect = d3.select("#yAxisDiv").append("div")
+                .attr("id", "yAxisSelect")
+                .attr("class", "dropdown-content");
+
+            yAxisSelect
+                .selectAll("a")
+                .data(Object.keys(ranges))
+                .enter()
+                .append("a")
+                .text(function(d) {return stripUnderScore(d);})
+                .on("click", function(d) {
+                    yAxis = d;
+                    updateGraph();
+                });
+
+            svg.append("g")
+                .attr("id", "yaxisticks")
+                .attr("transform", `translate(${margin.left}, ${0})`)
+                .call(d3.axisLeft(y).ticks(5));
+
+            function updateYAxis() {
+                return svg.select("#yaxisticks")
+                    .transition()
+                    .duration(1000)
+                    .call(d3.axisLeft(y).ticks(5));
+            }
+
+            function updateXAxis() {
+                svg.select("#xaxisticks")
+                    .transition()
+                    .duration(1000)
+                    .call(d3.axisBottom(x).ticks(5));
+            }
+
+            function update(newData) {
+                // update the scales for the new data sets
+                x = d3.scaleLinear()
+                    .domain(ranges[xAxis])
+                    .range([margin.left, width - margin.right]);
+
+                y = d3.scaleLinear()
+                    .domain(ranges[yAxis])
+                    .range([height - margin.bottom, margin.top]);
+
+                var t = d3.transition()
+                    .duration(750);
+
+                // JOIN new data with old elements.
+                var circles = svg
+                    .selectAll("circle")
+                    .data(newData, function(d) { return d.institution; });
+
+                // EXIT old elements not present in new data.
+                circles.exit()
+                    .transition(t)
+                    .attr("cy", function(d) { return y(d[yAxis]) + 100; })
+                    .attr("color", "blue")
+                    .style("fill-opacity", 1e-6)
+                    .remove();
+
+                // ENTER new elements present in new data.
+                circles
+                    .enter()
+                    .append("circle")
+                    .style("fill-opacity", 1e-6)
+                    .attr("class", "circleX")
+                    .attr("cx", function(d) {
+                        return x(d[xAxis]);
+                    })
+                    .attr("cy", function(d) {
+                        return y(d[yAxis] + 60);
+                    })
+                    .on("mouseover", function(d) {
+//                        introduction = dotInfo.text();
+                        introduction = dotInfo.html();
+                        document.getElementById("dotInfo").innerHTML = "";
+                        d3.select(this)
+                            .transition()
+                            .duration(800)
+                            .attr("r", 30);
+                        for (var i in d) {
+                            if (i === "year") break;
+                            d3.select("#dotInfo")
+                                .append("p")
+                                .text(stripUnderScore(i) + ": " + d[i]);
+                        }
+                    })
+                    .on("mouseout", hideInfo)
+                    .merge(circles)
+                    .transition(t)
+                    .attr("cx", function(d) {
+                        return x(d[xAxis]);
+                    })
+                    .attr("cy", function(d) {
+                        return y(d[yAxis]);
+                    })
+                    .attr("r", function(d) {
+                        return radius_range(d[radius])
+                    })
+                    .style("fill-opacity", 0.5);
+
+                updateXAxis();
+                updateYAxis();
+            }
+
+            function updateGraph() {
+                x = d3.scaleLinear()
+                    .domain(ranges[xAxis])
+                    .range([margin.left, width - margin.right]);
+
+                y = d3.scaleLinear()
+                    .domain(ranges[yAxis])
+                    .range([height - margin.bottom, margin.top]);
+
+                radius_range = (radius === "default") ? d3.scaleLinear()
+                    .domain([5,5])
+                    .range([5,5]) : d3.scaleLinear()
+                    .domain(ranges[radius])
+                    .range([3,12]);
+
+                if (stripUnderScore(xAxis) !== xAxisButton.text()) {
+                    xAxisButton
+                        .transition()
+                        .duration(500)
+                        .style("opacity", 0)
+                        .transition()
+                        .duration(500)
+                        .style("opacity", 1)
+                        .text(stripUnderScore(xAxis));
+                }
+
+                if (stripUnderScore(yAxis) !== yAxisButton.text()) {
+                    yAxisButton
+                        .transition()
+                        .duration(500)
+                        .style("opacity", 0)
+                        .transition()
+                        .duration(500)
+                        .style("opacity", 1)
+                        .text(stripUnderScore(yAxis));
+                }
+
+                svg.selectAll("circle")
+                    .transition()
+                    .duration(1000)
+                    .on("start", function() {
+                        d3.select(this)
+                            .attr("fill", "red")
+                            .attr("r", 6);
+                    })
+                    .delay(function(d, i) {
+                        return i / dataSet.length * 500;
+                    })
+                    .attr("cx", function(d) {
+                        return x(d[xAxis]);
+                    })
+                    .attr("cy", function(d) {
+                        return y(d[yAxis]);
+                    })
+                    .on("end", function() {  // End animation
+                        d3.select(this)  // 'this' means the current element
+                            .transition()
+                            .duration(500)
+                            .attr("fill", "black")  // Change color
+                            .attr("r", function(d) {
+                                return radius_range(d[radius]);
+                            });
+                    });
+
+                updateYAxis();
+                updateXAxis();
+            }
+
+            function stripUnderScore(string) {
+                var result = string;
+                while (result.includes("_"))
+                    result = result.replace("_"," ");
+
+                result = result.charAt(0).toUpperCase() + result.substring(1);
+                // Make the character after each space uppercase.
+                for (var i = 0; i < result.length; i++) {
+                    if (result.charAt(i) === " ") {
+                        if (i === result.length - 1) break;
+                        result = result.substring(0, i+1) +
+                            result.charAt(i+1).toUpperCase() + result.substring(i + 2);
+                    }
+                }
+                return result;
+            }
+
+//            Gets n random elements of an array arr
+            function getRandom(arr, n) {
+                var result = new Array(n),
+                    len = arr.length,
+                    taken = new Array(len);
+                if (n > len)
+                    throw new RangeError("getRandom: more elements taken than available");
+                while (n--) {
+                    var x = Math.floor(Math.random() * len);
+                    result[n] = arr[x in taken ? taken[x] : x];
+                    taken[x] = --len;
+                }
+                return result;
+            }
+        });
+
+</script>
+</body>
+</html>
